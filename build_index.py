@@ -1,6 +1,7 @@
 import json
 from elasticsearch import Elasticsearch
 import requests
+import time
 
 ES_HOST = {"host" : "localhost", "port" : 9200}
 
@@ -37,10 +38,13 @@ print(" response: '%s'" % (res))
 name_file = 'D:\@UVA_IA\@ AI Project\Data\wiki-2015-02-parsed-dump.json'
 bulk_data = [] 
 i = 0
+error_file = "errors.json"
+data_batch = []
 with open(name_file) as f:
     for line in f:
         i += 1
         data_dict = json.loads(line)
+        data_batch.extend(data_dict)
         #index
         op_dict = {
             "index": {
@@ -52,17 +56,32 @@ with open(name_file) as f:
         bulk_data.append(op_dict)
         bulk_data.append(data_dict)
         # bulk index the data
-        if( i % 500 == 0):
+        if( i % 5000 == 0):
             print("bulk indexing..." + str(i))
-            res = es.bulk(index = INDEX_NAME, body = bulk_data, refresh = True)
-            bulk_data = []
-        
+            try:
+                res = es.bulk(index = INDEX_NAME, body = bulk_data, refresh = True ,request_timeout=90)
+                data_batch = []                
+                bulk_data = []
+            except Exception as ex:
+                print("Error indexing, added record to " + str(error_file))
+                j = json.dumps(data_batch)
+                f = open('errortest.json', 'a')
+                print >> f, j
+                f.close()
+                data_batch = []
+                bulk_data = []
+                
+#Create error file
+#j = json.dumps(d, indent=4)
+#f = open('sample.json', 'w')
+#print >> f, j
+#f.close()
         
 
 
 #Example of get 
 uri = "http://localhost:9200/_search"
-term = "battle"
+term = "yamaha motor"
 """Simple Elasticsearch Query"""
 query = json.dumps({
     "query": {
