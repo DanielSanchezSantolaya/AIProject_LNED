@@ -6,6 +6,7 @@ import requests
 import LNED as mlned
 import string
 from nltk.corpus import stopwords
+import unicodedata
 
 
 uri = "http://localhost:9200/_search"
@@ -68,7 +69,9 @@ def get_articles(term, field):
     return articles
 
 def process_doc(text):
-    #If Mention Document Find the context according the windows size    
+    #If Mention Document Find the context according the windows size 
+    #text = str(text)
+    text = unicodedata.normalize('NFKD', text).encode('ascii','ignore')
     words = text.translate(None,string.punctuation).lower().split()
     words = [word for word in words if word not in cachedStopWords]
     return words
@@ -114,7 +117,7 @@ with open(name_file) as tsv:
                 for candidate_doc in candidate_docs:
                     candidate_texts.append(process_doc(candidate_doc['plain_text']))
                 mention_texts = []
-                for mention_doc in candidate_docs:
+                for mention_doc in mention_docs:
                     if mention_doc['wiki_page_id'] not in cand_ids:
                         #Get context (d_surround)
                         contexts = get_context(mention_doc['plain_text'], text)
