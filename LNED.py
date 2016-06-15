@@ -66,18 +66,21 @@ class LNED(object):
             self.n_bg_w[w] += value
             self.n_bg += value
             self.n_bg_d[d] += value
+            return #fix
         if t == 1: #Regular topic
             c_idx = self.idx_reg_z[z]
             self.n_reg_d_z[d, c_idx] += value
             self.n_reg_d[d] += value
             self.n_reg_w_z[w, c_idx] += value
             self.n_reg_z[c_idx] += value
+            return #fix
         if t == 2: #Mater topic
             self.n_ms_w_d[w, d] += value
             self.n_ms_d[d] += value
             
     def _get_random_topic(self, d):
-        if self._is_cand_doc(d): #Only background and candidate topic of that document can be selected
+        #fix
+        if d < self.num_candidates: #Only background and candidate topic of that document can be selected
             topics = [self.regular_topics[d]] + ['bg']
         else:
             topics = self.regular_topics + ['bg'] + ['ms']
@@ -94,15 +97,17 @@ class LNED(object):
         Sample from the Multinomial distribution and return the sample index.
         First
         """
-        if self._is_cand_doc(d):
+        if d < self.num_candidates: #fix
             topics = [self.topic_d_c[d]] + ['bg']
             p = p_reg + [p_bg]
         else:
             topics = self.regular_topics + ['bg'] + ['ms']
             p = p_reg + [p_bg] + [p_ms] 
         # normalize to obtain probabilities
-        p /= np.sum(p)
-        idx = np.random.multinomial(1,p).argmax()
+        
+        norm_p = [pi/sum(p) for pi in p] #fix
+        
+        idx = np.random.multinomial(1,norm_p).argmax()
         z = topics[idx]
         t = 1
         if z == 'bg':
@@ -111,7 +116,7 @@ class LNED(object):
             t = 2
         return z,t
     
-    def run(self, d_surround, d_c, max_iter=50):
+    def run(self, d_surround, d_c, max_iter=100):
         print 'start...'
         self.d_surround = d_surround
         self.d_c = d_c
@@ -134,17 +139,17 @@ class LNED(object):
                     self._update_counts(1, z, t, w, i)
                     #assign the topic
                     self.topics[(i, j)] = (z,t)
-        print 'finish...'
+        print 'finished...'
                     
     def _get_joint_dist_t_z(self, d, w):
         
-        if self._is_cand_doc(d):
+        if d < self.num_candidates: #fix
             #Background topics probability
             p_bg = self._get_p_bg(d, w)
             #Regular topics probability (Only the topic of this candidate for candidate documents)
-            p_reg = []
             c_idx = self.idx_reg_z[self.topic_d_c[d]]
-            p_reg.append(self._get_p_reg(d, w, c_idx))
+            p_reg = [self._get_p_reg(d, w, c_idx)] #fix
+            
             #Master topic probability (0 for candicate documents)
             p_ms = 0.0
         else:
@@ -154,7 +159,8 @@ class LNED(object):
             p_reg = []
             for c in self.regular_topics: #regular topics include ud(undefined)
                 c_idx = self.idx_reg_z[c]
-                p_reg.append(self._get_p_reg(d, w, c_idx))        
+                p_reg.append(self._get_p_reg(d, w, c_idx))     
+            
             #Master probability
             p_ms = self._get_p_ms(d, w)
         return p_bg, p_reg, p_ms
@@ -167,18 +173,19 @@ class LNED(object):
     
     # Get p(t_di=1, z_di=c)
     def _get_p_reg(self, d, w, c):   #WE EXCLUDE THE FIRST TERM IN SURROUND(Mention) Documents, as we don't have undefined topic for them
-        term1 = (self.n_reg_d_z[d, c] + self._get_alpha(c)) / (self.n_reg_d[d] + self.num_candidates * self.alpha + self.alpha_ud)
         term2 = (self.n_reg_w_z[w, c] + self._get_beta(c)) / (self.n_reg_z[c] + self.voc_size * self._get_beta(c)) 
         term3 = (self.n_reg_d[d] + self.gamma_2)
-        if self._is_cand_doc(d):
+        if d < self.num_candidates: #fix
             return term2 * term3
         else:
+            #fix
+            term1 = (self.n_reg_d_z[d, c] + self._get_alpha(c)) / (self.n_reg_d[d] + self.num_candidates * self.alpha + self.alpha_ud) 
             return term1 * term2 * term3
     
     #Get p(t_di=2, z_di = e_ms)
     def _get_p_ms(self, d, w):      #ONLY WILL BE USED FOR SURROUND(Mention) Documents
-        if self._is_cand_doc(d):
-            raise Exception('Called _get_p_ms() for a candidate document')
+#        if d < self.num_candidates:
+#            raise Exception('Called _get_p_ms() for a candidate document')
         #term1 = (self.n_ms_d[d] + self.beta_ms) / (self.n_ms_d[d] + self.voc_size * self.beta_ms) #numerator good??
         term1 = (self.n_ms_w_d[w, d] + self.beta_ms) / (self.n_ms_d[d] + self.voc_size * self.beta_ms) #numerator good??
         term2 = self.n_ms_d[d] + self.gamma_3
@@ -228,9 +235,9 @@ class LNED(object):
         return self.beta_ud if c is 'ud' else self.beta
         
     def _is_cand_doc(self, d):
-        return d < len(self.d_c)
+        return d < self.num_candidates #fix
         
-    def run_doc_query(self, d_query, max_iter = 15):
+    def run_doc_query(self, d_query, max_iter = 80):
         self._initialize_doc_query(d_query)
         for it in xrange(max_iter):
             for j in xrange(len(d_query)):
@@ -319,4 +326,9 @@ class LNED(object):
     def get_max_topic_doc_query(self):
         self.get_doc_dist()
         return max(self.probs_dquery_c.iteritems(), key=operator.itemgetter(1))[0]
+        
+    def get_candidate_ranking_doc_query(self):
+        ranking = sorted(self.probs_dquery_c.items(), key=operator.itemgetter(1), reverse = True)
+        ranking = [topic for topic, prob in ranking if topic != 'ud']
+        return ranking
         
