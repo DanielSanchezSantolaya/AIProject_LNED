@@ -211,10 +211,21 @@ except IOError:
         
 correct_predictions = 0
 total_predictions = 0
+num_total_candidates = 0
+num_doc = 0
+results = []
 with open(dataset_file) as f:
     for line in f:
+        print 'DOCUMENT ' + str(num_doc)
+        num_doc += 1
         sample_dict = json.loads(line)
+        print sample_dict.keys()
+        result = {}
+        result['docId'] = sample_dict['docId']
+        result['annotatedSpot'] = []
+        print 'num annotations in document: ' + str(len(sample_dict['annotatedSpot']))
         for annotation in sample_dict['annotatedSpot']:
+            write_line_log("--------------------------------")
             annotation_text = annotation['spot'].lower()
             #Look for the annotation at the anchor
             if annotation_text in anchors:
@@ -223,6 +234,7 @@ with open(dataset_file) as f:
                 if not annotation['entity'] in cand_ids:
                     cand_ids.append(annotation['entity'])
                 if len(cand_ids) > 1: #Get only ambiguos entities
+                    write_line_log("Annotation text: " + annotation_text)
                     #Get candidate documents
                     candidate_docs = []
                     candidate_not_founds = []
@@ -232,10 +244,11 @@ with open(dataset_file) as f:
                             candidate_docs.extend(candidate_doc)
                             write_line_log("Candidate id: " + str(cand_id) + " candidate title: " + unicodedata.normalize('NFKD', candidate_doc[0]['wiki_title']).encode('ascii','ignore'))
                         else:
+                            write_line_log("Candidate id not found: " + str(cand_id))
                             candidate_not_founds.append(cand_id)
                     #Remove candidate not founds
                     for cand in candidate_not_founds:
-                        cand_id.remove(cand)
+                        cand_ids.remove(cand)
                     #Check that we have at least one candidate
                     if len(candidate_docs) > 0:
                         #Get mention documents
@@ -275,21 +288,35 @@ with open(dataset_file) as f:
                         ranking = [cand_ids[int(topic)] for topic in ranking]
                         write_line_log("Ranking generated: " + str(ranking))
                         write_line_log("Real entity: " + str(annotation['entity']))
-                        write_line_log("--------------------------------")
                         total_predictions += 1
+                        num_total_candidates += len(candidate_processed)
                         if ranking[0] == int(annotation['entity']):
                             correct_predictions += 1
                         print str(correct_predictions) + 'correct predictions of ' + str(total_predictions)
+                        result_annotation = {}
+                        result_annotation['spot'] = annotation_text
+                        result_annotation['start'] = annotation['start']
+                        result_annotation['end'] = annotation['end']
+                        result_annotation['entity'] = ranking[0]
+                        result['annotatedSpot'].append(result_annotation)
                     write_line_log("Annotation discarded because candidate document have not been found from wikipedia: " + str(annotation_text))
                 else:
                     write_line_log("Annotation discarded because no more than 1 candidate have been found: " + str(annotation_text))
             else:
                 write_line_log("No candidates found in anchors file for: " + str(annotation_text))
-        #write json for results
+        #save json for results
+        results.append(result)
+        
 
-
-
+print 'Mean candidates per mention: ' + str(num_total_candidates/float(total_predictions))
+write_line_log('Mean candidates per mention: ' + str(num_total_candidates/float(total_predictions)))
 print 'Accuracy: ' + str(correct_predictions/float(total_predictions))
+write_line_log('Accuracy: ' + str(correct_predictions/float(total_predictions)))
+
+with open('results_MSNBC.json', 'a') as outfile:
+    for result in results:
+        json.dump(result, outfile)
+        outfile.write('\n')
 
 #with open(name_file) as tsv:
 #    for line in csv.reader(tsv, dialect="excel-tab"): #You can also use delimiter="\t" rather than giving a dialect.
