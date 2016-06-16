@@ -219,7 +219,6 @@ with open(dataset_file) as f:
         print 'DOCUMENT ' + str(num_doc)
         num_doc += 1
         sample_dict = json.loads(line)
-        print sample_dict.keys()
         result = {}
         result['docId'] = sample_dict['docId']
         result['annotatedSpot'] = []
@@ -227,6 +226,8 @@ with open(dataset_file) as f:
         for annotation in sample_dict['annotatedSpot']:
             write_line_log("--------------------------------")
             annotation_text = annotation['spot'].lower()
+            annotation_text = unicodedata.normalize('NFKD', annotation_text).encode('ascii','ignore')
+            print annotation_text
             #Look for the annotation at the anchor
             if annotation_text in anchors:
                 cand_ids = anchors[annotation_text]
@@ -299,7 +300,8 @@ with open(dataset_file) as f:
                         result_annotation['end'] = annotation['end']
                         result_annotation['entity'] = ranking[0]
                         result['annotatedSpot'].append(result_annotation)
-                    write_line_log("Annotation discarded because candidate document have not been found from wikipedia: " + str(annotation_text))
+                    else:
+                        write_line_log("Annotation discarded because candidate document have not been found from wikipedia: " + str(annotation_text))
                 else:
                     write_line_log("Annotation discarded because no more than 1 candidate have been found: " + str(annotation_text))
             else:
